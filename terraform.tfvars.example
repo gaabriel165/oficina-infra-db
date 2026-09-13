@@ -1,0 +1,9 @@
+region       = "us-east-1"
+project_name = "oficina-api"
+
+# Optional overrides (defaults shown):
+# db_instance_class        = "db.t3.micro"
+# db_engine_version        = "16.15"
+# db_name                  = "oficina_mecanica"
+# db_allocated_storage     = 20
+# db_backup_retention_days = 1
