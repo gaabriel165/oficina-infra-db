@@ -126,6 +126,7 @@ Destruição na ordem inversa: destrua `oficina-lambda-auth` antes deste reposit
 ## Links
 
 - Aplicação: [gaabriel165/oficina-api](https://github.com/gaabriel165/oficina-api)
+- Swagger da API (com o ambiente no ar): `https://<api-id>.execute-api.us-east-1.amazonaws.com/swagger/index.html` · especificação versionada: [swagger.yaml](https://github.com/gaabriel165/oficina-api/blob/main/docs/swagger.yaml) · collection: [insomnia-collection.json](https://github.com/gaabriel165/oficina-api/blob/main/insomnia-collection.json)
 - Rede e cluster: [gaabriel165/oficina-infra-k8s](https://github.com/gaabriel165/oficina-infra-k8s)
 - Autenticação serverless + API Gateway: [gaabriel165/oficina-lambda-auth](https://github.com/gaabriel165/oficina-lambda-auth)
 - Modelo de dados, justificativa e ER: [database.md](https://github.com/gaabriel165/oficina-api/blob/main/docs/architecture/database.md)
