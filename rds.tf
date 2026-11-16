@@ -10,7 +10,7 @@ resource "aws_db_subnet_group" "this" {
 
 resource "aws_security_group" "db" {
   name        = "${var.project_name}-db"
-  description = "PostgreSQL access from the EKS worker nodes and the authentication Lambda"
+  description = "PostgreSQL access from the EKS worker nodes"
   vpc_id      = local.vpc_id
 
   ingress {
@@ -20,27 +20,6 @@ resource "aws_security_group" "db" {
     protocol        = "tcp"
     security_groups = [local.node_security_group_id]
   }
-
-  ingress {
-    description     = "PostgreSQL from the authentication Lambda"
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
-    security_groups = [aws_security_group.db_client.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-resource "aws_security_group" "db_client" {
-  name        = "${var.project_name}-db-client"
-  description = "Attach to any workload outside the cluster that must reach the database"
-  vpc_id      = local.vpc_id
 
   egress {
     from_port   = 0

@@ -13,11 +13,6 @@ output "db_security_group_id" {
   value       = aws_security_group.db.id
 }
 
-output "db_client_security_group_id" {
-  description = "Security group that grants PostgreSQL access to workloads outside the cluster"
-  value       = aws_security_group.db_client.id
-}
-
 output "database_url_parameter_name" {
   description = "SSM parameter holding the full connection string"
   value       = aws_ssm_parameter.database_url.name
