@@ -2,14 +2,16 @@
 
 [![Terraform](https://github.com/gaabriel165/oficina-infra-db/actions/workflows/terraform.yml/badge.svg)](https://github.com/gaabriel165/oficina-infra-db/actions/workflows/terraform.yml)
 
-Provisiona, com **Terraform**, o banco **Amazon RDS for PostgreSQL** usado pela [oficina-api](https://github.com/gaabriel165/oficina-api) e pela Lambda de autenticação ([oficina-lambda-auth](https://github.com/gaabriel165/oficina-lambda-auth)). Depende da rede criada por [oficina-infra-k8s](https://github.com/gaabriel165/oficina-infra-k8s), lida via `terraform_remote_state`, e publica a string de conexão no **SSM Parameter Store** para que os pipelines dos consumidores nunca precisem de segredos manuais.
+Provisiona, com **Terraform**, o banco **Amazon RDS for PostgreSQL** do microsserviço de ordens de serviço ([oficina-os-service](https://github.com/gaabriel165/oficina-os-service)). Depende da rede criada por [oficina-infra-k8s](https://github.com/gaabriel165/oficina-infra-k8s), lida via `terraform_remote_state`, e publica a string de conexão no **SSM Parameter Store** para que o pipeline do serviço nunca precise de segredos manuais.
 
-Parte do Tech Challenge da pós-graduação em Arquitetura de Software (FIAP SOAT) — Fase 3. A justificativa formal do PostgreSQL, o diagrama ER e a explicação do modelo relacional estão em [`oficina-api/docs/architecture/database.md`](https://github.com/gaabriel165/oficina-api/blob/main/docs/architecture/database.md).
+Parte do Tech Challenge da pós-graduação em Arquitetura de Software (FIAP SOAT) — Fases 3 e 4. A justificativa formal do PostgreSQL, o diagrama ER e a explicação do modelo relacional estão em [`oficina-os-service/docs/architecture/database.md`](https://github.com/gaabriel165/oficina-os-service/blob/main/docs/architecture/database.md).
+
+Na Fase 4 cada microsserviço passou a ter o próprio banco. Este repositório guarda só o banco do OS Service; o RDS do Billing Service e as tabelas DynamoDB do Execution Service são criados pelo Terraform de cada um deles. A Lambda de autenticação deixou de acessar o banco e consulta o cliente pela API do OS Service.
 
 ## Propósito
 
-- Banco relacional **gerenciado** (backups automáticos, criptografia em repouso, patching) para a aplicação e para a Lambda.
-- Acesso **apenas de dentro da VPC**: o security group aceita 5432 só do security group dos nós do EKS e do security group `db-client`, anexado à Lambda `auth-cpf`.
+- Banco relacional **gerenciado** (backups automáticos, criptografia em repouso, patching) para o OS Service.
+- Acesso **apenas de dentro da VPC**: o security group aceita 5432 só do security group dos nós do EKS.
 - Senha gerada pelo Terraform (`random_password`) e entregue via SSM SecureString `/oficina-api/database_url`; nada em texto plano no Git.
 - Visibilidade: Performance Insights, export de logs do PostgreSQL para o CloudWatch e `log_min_duration_statement = 500 ms` para achar consultas lentas.
 
@@ -38,8 +40,7 @@ flowchart LR
     subgraph AWS["AWS us-east-1"]
         subgraph VPC["VPC - subnets privadas"]
             RDS[("RDS PostgreSQL 16.15 db.t3.micro<br/>gp3 20GB criptografado, backup 1 dia")]
-            SGdb["SG db: 5432 apenas de SG nós EKS e SG db-client"]
-            SGclient["SG db-client - anexado à Lambda"]
+            SGdb["SG db: 5432 apenas do SG dos nós EKS"]
             PG["Parameter group: log_min_duration_statement 500"]
         end
         SSM[("SSM: /oficina-api/database_url")]
@@ -50,11 +51,10 @@ flowchart LR
     Apply -.-> S3d
     Apply --> RDS
     Apply --> SGdb
-    Apply --> SGclient
     Apply --> PG
     Apply --> SSM
     RDS -.-> CW
-    SSM -.->|"lido pelo CD do app e pela Lambda"| Consumers["oficina-api e oficina-lambda-auth"]
+    SSM -.->|"lido pelo CD"| Consumers["oficina-os-service"]
 ```
 
 ### Recursos criados
@@ -62,18 +62,17 @@ flowchart LR
 | Arquivo | Recursos |
 |---|---|
 | `remote-state.tf` | Lê `vpc_id`, `private_subnet_ids` e `node_security_group_id` do state `k8s/` |
-| `rds.tf` | `aws_db_subnet_group` (subnets privadas), `aws_security_group.db` (5432 dos nós EKS e do `db-client`), `aws_security_group.db_client`, `aws_db_parameter_group` (postgres16, `log_min_duration_statement=500`), `aws_db_instance` |
+| `rds.tf` | `aws_db_subnet_group` (subnets privadas), `aws_security_group.db` (5432 dos nós EKS), `aws_db_parameter_group` (postgres16, `log_min_duration_statement=500`), `aws_db_instance` |
 | `ssm.tf` | SSM SecureString `/oficina-api/database_url` = `postgres://user:pass@host:5432/oficina_mecanica?sslmode=require` |
-| `outputs.tf` | `rds_endpoint`, `db_name`, `db_security_group_id`, `db_client_security_group_id`, `database_url_parameter_name`, `database_url` (sensível) |
+| `outputs.tf` | `rds_endpoint`, `db_name`, `db_security_group_id`, `database_url_parameter_name`, `database_url` (sensível) |
 
 ### Quem consome
 
 | Consumidor | Como |
 |---|---|
-| `oficina-api` (CD) | `aws ssm get-parameter --name /oficina-api/database_url --with-decryption` → Secret do Kubernetes |
-| `oficina-lambda-auth` (Terraform) | `data.aws_ssm_parameter` → variável de ambiente da Lambda; SG `db_client_security_group_id` na `vpc_config` |
+| `oficina-os-service` (CD) | `aws ssm get-parameter --name /oficina-api/database_url --with-decryption` → Secret do Kubernetes |
 
-O schema (tabelas, índices, seed) é versionado com **golang-migrate** no repositório da aplicação e aplicado no startup dela ([ADR-008](https://github.com/gaabriel165/oficina-api/blob/main/docs/architecture/adr/ADR-008-migrations-no-startup-da-aplicacao.md)).
+O schema (tabelas, índices, seed) é versionado com **golang-migrate** no repositório da aplicação e aplicado no startup dela ([ADR-008](https://github.com/gaabriel165/oficina-os-service/blob/main/docs/architecture/adr/ADR-008-migrations-no-startup-da-aplicacao.md)).
 
 ## Como executar
 
@@ -113,10 +112,10 @@ Configuração no GitHub (Settings → Secrets and variables → Actions):
 ### Ordem entre os repositórios
 
 ```
-oficina-infra-k8s  →  oficina-infra-db  →  oficina-api (CD)  →  oficina-lambda-auth
+oficina-infra-k8s  →  oficina-infra-db  →  CD dos três microsserviços  →  oficina-lambda-auth
 ```
 
-Destruição na ordem inversa: destrua `oficina-lambda-auth` antes deste repositório (a Lambda usa o security group `db-client`).
+Destruição na ordem inversa.
 
 ## Regras do repositório
 
@@ -125,8 +124,8 @@ Destruição na ordem inversa: destrua `oficina-lambda-auth` antes deste reposit
 
 ## Links
 
-- Aplicação: [gaabriel165/oficina-api](https://github.com/gaabriel165/oficina-api)
-- Swagger da API (com o ambiente no ar): `https://<api-id>.execute-api.us-east-1.amazonaws.com/swagger/index.html` · especificação versionada: [swagger.yaml](https://github.com/gaabriel165/oficina-api/blob/main/docs/swagger.yaml) · collection: [insomnia-collection.json](https://github.com/gaabriel165/oficina-api/blob/main/insomnia-collection.json)
+- Microsserviço dono do banco: [gaabriel165/oficina-os-service](https://github.com/gaabriel165/oficina-os-service)
+- Swagger da API (com o ambiente no ar): `https://<api-id>.execute-api.us-east-1.amazonaws.com/swagger/index.html` · especificação versionada: [swagger.yaml](https://github.com/gaabriel165/oficina-os-service/blob/main/docs/swagger.yaml) · collection: [insomnia-collection.json](https://github.com/gaabriel165/oficina-os-service/blob/main/insomnia-collection.json)
 - Rede e cluster: [gaabriel165/oficina-infra-k8s](https://github.com/gaabriel165/oficina-infra-k8s)
 - Autenticação serverless + API Gateway: [gaabriel165/oficina-lambda-auth](https://github.com/gaabriel165/oficina-lambda-auth)
 - Modelo de dados, justificativa e ER: [database.md](https://github.com/gaabriel165/oficina-api/blob/main/docs/architecture/database.md)

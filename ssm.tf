@@ -4,7 +4,7 @@ locals {
 
 resource "aws_ssm_parameter" "database_url" {
   name        = "/${var.project_name}/database_url"
-  description = "Connection string consumed by the API deploy and the authentication Lambda"
+  description = "Connection string consumed by the deploy of the service order microservice"
   type        = "SecureString"
   value       = local.database_url
 }
